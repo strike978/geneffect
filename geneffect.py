@@ -255,12 +255,12 @@ def create_visualizations(results_df, selected_traits, top_bar_count=15, top_tab
 
 def main():
     st.set_page_config(
-        page_title="Geneffect",
+        page_title="GenEffect",
         page_icon="🧬",
         layout="wide"
     )
 
-    st.title("🧬 Geneffect")
+    st.title("GenEffect")
     st.markdown(
         "**See which genetic variants impact hair, skin, and eye color, ranked by statistical strength.**")
 
