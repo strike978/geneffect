@@ -47,7 +47,7 @@ def get_trait_columns(traits_df):
     }
 
 
-def run_snp_analysis(traits_df, genotypes_df, selected_traits, selected_groups):
+def run_snp_analysis(traits_df, genotypes_df, selected_traits, selected_groups, dominance_mode=False):
     """Run ANOVA + R² analysis for selected traits and populations"""
 
     # Load SNP-to-gene mapping
@@ -102,36 +102,36 @@ def run_snp_analysis(traits_df, genotypes_df, selected_traits, selected_groups):
                 merged_reg = merged_reg.dropna(
                     subset=[snp])  # Remove NaN values too
 
+                r2 = float('nan')
                 if len(merged_reg) > 1 and len(set(merged_reg[snp])) > 1:
-                    # Try additive coding (count minor alleles: AA=0, AG=1, GG=2)
                     genotypes = merged_reg[snp].unique()
-                    if len(genotypes) >= 2:
-                        # Convert to strings and sort genotypes
-                        genotypes_str = [str(gt)
-                                         for gt in genotypes if str(gt) != 'nan']
-                        if len(genotypes_str) >= 2:
-                            sorted_genotypes = sorted(genotypes_str)
-                            genotype_map = {gt: i for i,
-                                            gt in enumerate(sorted_genotypes)}
-                            merged_reg['snp_additive'] = merged_reg[snp].astype(str).map(
-                                genotype_map)
+                    genotypes_str = [str(gt)
+                                     for gt in genotypes if str(gt) != 'nan']
+                    if len(genotypes_str) >= 2:
+                        sorted_genotypes = sorted(genotypes_str)
+                        genotype_map = {gt: i for i,
+                                        gt in enumerate(sorted_genotypes)}
+                        merged_reg['snp_additive'] = merged_reg[snp].astype(
+                            str).map(genotype_map)
 
-                            X = merged_reg['snp_additive'].values.reshape(
-                                -1, 1)
-                            y = merged_reg[trait].values
+                        X = merged_reg['snp_additive'].values.reshape(-1, 1)
+                        y = merged_reg[trait].values
 
-                            if not np.isnan(y).all() and len(set(X.flatten())) > 1:
-                                model = LinearRegression()
-                                model.fit(X, y)
-                                r2 = model.score(X, y)
-                            else:
-                                r2 = float('nan')
-                        else:
-                            r2 = float('nan')
-                    else:
-                        r2 = float('nan')
-                else:
-                    r2 = float('nan')
+                        if dominance_mode:
+                            # Add dominance coding: heterozygote = 1, else 0
+                            # Assumes biallelic SNPs (e.g., AA, AG, GG)
+                            het_genotypes = [
+                                gt for gt in sorted_genotypes if len(set(gt)) > 1]
+                            merged_reg['snp_dominance'] = merged_reg[snp].astype(
+                                str).apply(lambda x: 1 if x in het_genotypes else 0)
+                            X = np.column_stack(
+                                [merged_reg['snp_additive'].values, merged_reg['snp_dominance'].values])
+
+                        if not np.isnan(y).all() and len(set(X.flatten())) > 1:
+                            model = LinearRegression()
+                            model.fit(X, y)
+                            r2 = model.score(X, y)
+                    # else r2 stays nan
 
                 # Get allele information and effect direction
                 # Exclude missing genotypes (--) and NaN from effect calculation
@@ -308,6 +308,8 @@ def main():
         "Top results in bar chart", 5, 30, 15, 1)
     top_table_count = st.sidebar.slider(
         "Top results in trait table", 5, 30, 10, 1)
+    dominance_mode = st.sidebar.checkbox(
+        "Include dominance effects", value=False, help="Add dominance coding to regression analysis.")
 
     # Main content
     col1, col2, col3 = st.columns(3)
@@ -323,7 +325,7 @@ def main():
     if st.button("🚀 Run Analysis", type="primary"):
         with st.spinner("Running genetic analysis..."):
             results = run_snp_analysis(
-                traits_df, genotypes_df, selected_traits, selected_groups)
+                traits_df, genotypes_df, selected_traits, selected_groups, dominance_mode)
 
         if len(results) == 0:
             st.error("No results generated. Please check your selections.")
